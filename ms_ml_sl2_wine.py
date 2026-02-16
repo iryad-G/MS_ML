@@ -63,7 +63,7 @@ print("............. EDA  .........")
 EDA
 """
 
-df = pd.read_csv("/content/wine.csv")
+df = pd.read_csv("wine.csv")
 
 df.head()
 
@@ -760,4 +760,4 @@ df_results = pd.DataFrame(results)
 print("\n--- Final Runtime & Performance Table ---")
 print(df_results.sort_values(by="Macro F1", ascending=False))
 
-print("............. eveything for Dataset A is done now ...........")
+print("............. eveything for Dataset B: Wine is done now ...........")
