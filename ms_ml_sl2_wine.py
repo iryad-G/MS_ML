@@ -55,6 +55,14 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
+
+
+#####################################################################################################################
+print("............. EDA  .........")
+"""
+EDA
+"""
+
 df = pd.read_csv("/content/wine.csv")
 
 df.head()
@@ -96,35 +104,14 @@ sns.countplot(x=y_wine)
 plt.title("Wine Quality Class Imbalance")
 plt.show()
 
-
-
-
-
-"""
-
-Hypothesis: Wine Quality Dataset
-Predicted Ordering: SVM (RBF) ≥ Neural Network (Deep) > kNN > Decision Tree
-Detailed Rationale:
-1. Support Vector Machines (The "Winner"): I hypothesize that the SVM with an RBF kernel will achieve the highest Macro-F1 score, provided weighted classes are used.
-    ◦ Theory: The EDA shows moderate non-linear correlations between chemical features (e.g., alcohol, volatile acidity) and quality. The RBF kernel projects these features into higher dimensions to find a separating hyperplane.
-    ◦ The "Key" Factor: Standard SVMs maximize margins based on accuracy, which favors majority classes (quality 5 and 6) in this imbalanced dataset. By applying class_weight='balanced', we modify the penalty parameter C inversely proportional to class frequencies. This forces the margin to pay attention to minority classes (3, 4, 8), which is critical for a high Macro-F1 score.
-2. Neural Networks (The "Challenger"): I hypothesize that the Deep Neural Network will outperform the Wide architecture but may struggle against the SVM due to the SGD-only constraint.
-    ◦ Theory: Deep networks are theoretically better at learning compositional functions (hierarchical chemical interactions) than shallow, wide networks.
-    ◦ Constraint Impact: The syllabus forbids adaptive optimizers like Adam. SGD is sensitive to learning rates and often converges slower or gets stuck in local minima on tabular data compared to the convex optimization of an SVM.
-3. k-Nearest Neighbors (kNN): I hypothesize kNN will perform moderately but suffer from the curse of dimensionality.
-    ◦ Theory: While kNN captures local structure well, wine quality relies on complex combinations of 11 chemical attributes. In high-dimensional space, data points become sparse, making distance metrics less reliable.
-    ◦ Mitigation: Using distance-based weighting (where closer neighbors vote more heavily) will be essential to prevent the majority class from drowning out local minority neighborhoods.
-4. Decision Trees (The Baseline): I hypothesize Decision Trees will perform worst due to high variance.
-    ◦ Theory: Trees rely on orthogonal splits. The EDA indicates continuous, correlated features which usually require oblique decision boundaries. Single trees tend to overfit noise (chemical variations that don't affect taste), leading to poor generalization compared to the regularized approaches of SVM and NN.
-
+#####################################################################################################################
+print("............. Decision Tree  .........")
 
 """
+Decision Tree Complexity: Overfitting & Imbalance (Wine)
+"""
 
-
-
-
-
-# Stratified Split
+# --- 1. Stratified Split
 X_train, X_test, y_train, y_test = train_test_split(
     X_wine, y_wine, test_size=0.2, stratify=y_wine, random_state=42
 )
@@ -239,10 +226,15 @@ plt.ylabel("Macro F1 Score", fontsize=12)
 plt.legend(loc="best")
 plt.grid(True)
 plt.show()
+print("............. Decision Tree is done  .........")
+#####################################################################################################################
+print("............. KNN  .........")
+"""
+KNN Model Complexity: The Impact of 'k' on Imbalance (Wine)
+"""
 
 
-
-# --- 2. TUNING LOOP ---
+# --- 1. TUNING LOOP ---
 # We test odd k values to avoid ties
 k_values = list(range(1, 30, 2))
 print(f"Tuning kNN for Wine over k={k_values}...")
@@ -271,7 +263,7 @@ for k in k_values:
     results['cv_f1'].append(cv_scores['test_f1_macro'].mean())
     print(f"k={k}: Acc={results['cv_acc'][-1]:.4f}, F1={results['cv_f1'][-1]:.4f}")
 
-# --- 3. PLOT COMPLEXITY CURVE ---
+# --- 2. PLOT COMPLEXITY CURVE ---
 plt.figure(figsize=(10, 6))
 plt.plot(results['k'], results['cv_acc'], marker='o', linestyle='--', label='CV Accuracy (Blue)')
 plt.plot(results['k'], results['cv_f1'], marker='s', linewidth=2, color='orange', label='CV Macro F1 (Orange)')
@@ -283,7 +275,7 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-# --- 4. BEST MODEL SELECTION ---
+# --- 3. BEST MODEL SELECTION ---
 best_idx = np.argmax(results['cv_f1']) # Maximize F1, not Accuracy
 best_k = results['k'][best_idx]
 print(f"\nOptimal k: {best_k}")
@@ -292,14 +284,14 @@ print(f"Best CV Accuracy: {results['cv_acc'][best_idx]:.4f}")
 
 best_k
 
-# 1. Setup the Best kNN Model
+# 4. Setup the Best kNN Model
 # Using k=9 and weights='distance' as found in your Grid Search
 knn_pipeline = Pipeline([
     ('scaler', StandardScaler()), # Scaling is mandatory for kNN
     ('knn', KNeighborsClassifier(n_neighbors=9, weights='distance', n_jobs=-1))
 ])
 
-# 2. Compute Learning Curves
+# 5. Compute Learning Curves
 print("Generating kNN Learning Curve...")
 train_sizes, train_scores, test_scores = learning_curve(
     estimator=knn_pipeline,
@@ -312,13 +304,13 @@ train_sizes, train_scores, test_scores = learning_curve(
     random_state=42
 )
 
-# 3. Calculate Means and Standard Deviations
+# 6. Calculate Means and Standard Deviations
 train_mean = np.mean(train_scores, axis=1)
 train_std = np.std(train_scores, axis=1)
 test_mean = np.mean(test_scores, axis=1)
 test_std = np.std(test_scores, axis=1)
 
-# 4. Plotting
+# 7. Plotting
 plt.figure(figsize=(10, 6))
 plt.plot(train_sizes, train_mean, 'o-', color="blue", label="Training Score")
 plt.plot(train_sizes, test_mean, 'o-', color="green", label="Cross-Validation Score")
@@ -334,9 +326,13 @@ plt.legend(loc="best")
 plt.grid(True)
 plt.show()
 
+print("............. KNN is done  .........")
+#####################################################################################################################
 
-
-
+print("............. SVM  .........")
+"""
+SVM Model Complexity: Impact of Regularization (Wine)
+"""
 
 # Define Pipeline
 svm_pipe = Pipeline([
@@ -423,7 +419,7 @@ plt.grid(True, which="both", ls="-", alpha=0.5)
 
 plt.show()
 
-# 2. Compute Learning Curves
+# Compute Learning Curves
 # train_sizes: splits the data into 5 sizes from 10% to 100%
 train_sizes, train_scores, test_scores = learning_curve(
     estimator=best_svm,
@@ -458,14 +454,12 @@ plt.legend(loc="best")
 plt.grid(True)
 plt.show()
 
-
-
-
-
-
-
-
-
+print("............. SVM is done  .........")
+#####################################################################################################################
+print("............. MLP  .........")
+"""
+MLP Sklearn
+"""
 
 
 nn_pipeline = Pipeline([
@@ -530,13 +524,17 @@ plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-# --- 1. DATA PREP (for this specific cell) ---
+#####################################################################################################################
+"""
+MLP Pytorch deep vs Wide
+"""
+
 # Re-scale data specifically for NN (Sensitive to scale)
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
-# Map labels 3..9 to 0..6 for PyTorch CrossEntropy
+# Map labels 1..8 to 0..7 for PyTorch CrossEntropy
 unique_labels = sorted(y_wine.unique())
 label_map = {val: idx for idx, val in enumerate(unique_labels)}
 y_train_map = y_train.map(label_map).values
@@ -667,32 +665,36 @@ with torch.no_grad():
     # Remap 0-6 back to 3-9 for display
     print(classification_report(y_test_t, final_preds, zero_division=0))
 
+print("............. MLP is done .........")
+#####################################################################################################################
 
+"""
+Final models comparison
+"""
+print("............. Final models comparison  .........")
 
-# --- 1. SETUP BEST MODELS (From Step 2 Analysis) ---
+# --- 1. SETUP BEST MODELS
 models = {
     "Baseline (Dummy)": DummyClassifier(strategy="most_frequent"),
 
-    # Best Params from Source [1]: ccp_alpha=0.00068
+    # Best Params : ccp_alpha=0.00068
     "Decision Tree": Pipeline([
         ('scaler', StandardScaler()),
         ('dt', DecisionTreeClassifier(random_state=42, ccp_alpha=0.00068, class_weight='balanced'))
     ]),
 
-    # Best Params from Source [2]: k=9, distance weights
+    # Best Params f: k=9, distance weights
     "kNN": Pipeline([
         ('scaler', StandardScaler()),
         ('knn', KNeighborsClassifier(n_neighbors=9, weights='distance', n_jobs=-1))
     ]),
 
-    # Best Params from Source [3]: C=2, gamma=0.1, RBF
+    # Best Params : C=2, gamma=0.1, RBF
     "SVM (RBF)": Pipeline([
         ('scaler', StandardScaler()),
         ('svm', SVC(C=2, gamma=0.1, kernel='rbf', class_weight='balanced', random_state=42))
     ]),
 
-    # Using the WideNet wrapper from previous step (Assuming PyTorchClassifier is defined in your notebook)
-    # If not, we use MLPClassifier as a proxy for the runtime comparison
     "Neural Net": nn_pipeline
 }
 
@@ -758,3 +760,4 @@ df_results = pd.DataFrame(results)
 print("\n--- Final Runtime & Performance Table ---")
 print(df_results.sort_values(by="Macro F1", ascending=False))
 
+print("............. eveything for Dataset A is done now ...........")
