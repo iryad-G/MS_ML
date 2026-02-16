@@ -72,7 +72,7 @@ from torch.utils.data import DataLoader, TensorDataset
 EDA
 """
 print("............. start EDA  .........")
-df = pd.read_csv("/content/adult.csv")
+df = pd.read_csv("adult.csv")
 
 df.head()
 
