@@ -56,7 +56,6 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
-
 # ---- pytorch (only if you really use it) ----
 import torch
 import torch.nn as nn
@@ -66,6 +65,13 @@ from torch.utils.data import DataLoader, TensorDataset
 # ---- colab only (remove if not in colab) ----
 # from google.colab import files
 
+
+#####################################################################################################################
+
+"""
+EDA
+"""
+print("............. start EDA  .........")
 df = pd.read_csv("/content/adult.csv")
 
 df.head()
@@ -108,24 +114,19 @@ plt.title("Work Hours vs Income Distribution")
 plt.show()
 
 # 1. Separate Features and Target
-X = df.drop('class', axis=1)  # Drop the target from features immediately
+X = df.drop('class', axis=1)  # Drop the target from features
 y_raw = df['class']
 
-# 2. Encode Target to 0/1 NOW
-# Note: The raw csv often has spaces, e.g., ' <=50K'.
-# Using .str.strip() ensures accuracy.
+# 2. Encode Target to 0/1
 y = y_raw.apply(lambda x: 1 if '>50K' in str(x) else 0)
 
-# Verify the encoding worked (Should be ~24% for 1s)
 print(f"Class Balance:\n{y.value_counts()}")
 
 # Combine X_encoded (features with target-encoded categoricals) and y (numeric target)
 # X_encoded contains all features, with categorical ones already target-encoded.
-# y is already a Series named 'class', so it will become a column in the combined DataFrame
 X_y_combined = pd.concat([X, y], axis=1)
 
 # Calculate correlations
-# Now, 'class' will be present in X_y_combined as a numeric column
 numeric_df = X_y_combined.select_dtypes(include=['number'])
 correlations = numeric_df.corr()['class'].sort_values(ascending=False)
 
@@ -134,22 +135,15 @@ print(correlations)
 
 df.head()
 
-#print("Feature Correlations with Target ('class') for df_all_numerical:")
-#correlations_all_numerical = df_all_numerical.corr()['class'].sort_values(ascending=False)
-#print(correlations_all_numerical)
-
-#correlation_education = df_all_numerical['education'].corr(df_all_numerical['education-num'])
-#print(f"Correlation between 'education' (target-encoded) and 'education-num': {correlation_education}")
 
 # 1. Prepare the DataFrame for Correlation
-# Create a copy so we don't mess up the original 'df'
 corr_df = df.copy()
 
 # 2. Drop Irrelevant and Redundant columns
 cols_to_drop = ['fnlwgt', 'education']
 corr_df = corr_df.drop(columns=[c for c in cols_to_drop if c in corr_df.columns])
 
-# 3. Handle Categoricals for Correlation (Optional but recommended)
+# 3. Handle Categoricals for Correlation
 # Simple Label Encoding allows string columns to appear in the heatmap
 from sklearn.preprocessing import LabelEncoder
 for col in corr_df.select_dtypes(include='object').columns:
@@ -172,6 +166,7 @@ X= X.drop(columns=['fnlwgt', 'education'])
 y.head()
 
 
+#####################################################################################################################
 
 # 1. Split FIRST (Crucial for reproducibility and leakage control)
 X_train, X_test, y_train, y_test = train_test_split(
@@ -179,8 +174,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 # --- 2. DEFINE PREPROCESSING PIPELINE ---
-# Identify feature types (Ensure X_train is defined from Phase 1)
-# numerical_cols and categorical_cols should be lists of column names
+# Identify feature types
 numerical_cols = X_train.select_dtypes(include=['int64', 'float64']).columns
 categorical_cols = X_train.select_dtypes(include=['object', 'category']).columns
 
@@ -203,61 +197,18 @@ preprocessor = ColumnTransformer(
         ('cat', cat_transformer, categorical_cols)
     ])
 
-preprocessor
+print("............. Finish EDA  .........")
+#####################################################################################################################
 
-# --- 1. DEFINE CUSTOM METRIC (PR-AUC) ---
-# The syllabus explicitly requires PR-AUC for Adult due to imbalance.
-def pr_auc_score_func(y_true, y_pred_proba):
-    # Needs probability of the positive class (1)
-    precision, recall, _ = precision_recall_curve(y_true, y_pred_proba)
-    return auc(recall, precision)
+print("............. Decision Tree  .........")
 
-# Create scorers for cross_validate
-scorers = {
-    'accuracy': 'accuracy',
-    'f1': 'f1',
-    'pr_auc': make_scorer(pr_auc_score_func, needs_proba=True)
-}
-
-# --- 3. THE HARNESS FUNCTION ---
-def evaluate_model(model_name, classifier, X, y):
-    """
-    Standardized evaluation function for Phase 3 experiments.
-    Returns the CV results dictionary.
-    """
-    # Create the full pipeline
-    pipe = Pipeline(steps=[('preprocessor', preprocessor),
-                           ('classifier', classifier)])
-
-    # 5-Fold Stratified CV (Fixed seed for reproducibility)
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-    print(f"--- Running 5-Fold CV for {model_name} ---")
-    results = cross_validate(
-        pipe, X, y, cv=cv, scoring=scorers, return_train_score=True, n_jobs=-1
-    )
-
-    print(f"Test Accuracy: {results['test_accuracy'].mean():.4f} (+/- {results['test_accuracy'].std():.4f})")
-    print(f"Test F1:       {results['test_f1'].mean():.4f}")
-    print(f"Test PR-AUC:   {results['test_pr_auc'].mean():.4f}")
-
-    return results
-
-from sklearn.dummy import DummyClassifier
-
-# "Most Frequent" predicts class 0 (<=50K) every time
-dummy_results = evaluate_model("Dummy Baseline", DummyClassifier(strategy='most_frequent'), X_train, y_train)
-
-# Store this baseline F1 and PR-AUC.
-# Your tuned models MUST beat these numbers significantly.
-baseline_f1 = dummy_results['test_f1'].mean()
-baseline_prauc = dummy_results['test_pr_auc'].mean()
-
-X.head()
+"""
+Decision Tree
+"""
 
 # --- 1. SETUP ---
-# We use the pipeline from Phase 2 (preprocessor)
-# We need to find the range of alphas that actually change the tree structure
+# We use the pipeline from previous Phase  (preprocessor)
+# find the range of alphas that actually change the tree structure
 dt_temp = DecisionTreeClassifier(random_state=42)
 dt_temp.fit(preprocessor.fit_transform(X_train, y_train), y_train)
 
@@ -285,12 +236,11 @@ for alpha in ccp_alphas:
     cv_score = cross_val_score(clf, X_train, y_train, cv=5, scoring='f1', n_jobs=-1)
     val_scores.append(np.mean(cv_score))
 
-    # Optional: Get training score to show overfitting gap (Bias-Variance analysis)
-    # (Fitting on full train just for the plot point)
+    # Get training score to show overfitting gap (Bias-Variance analysis)
     clf.fit(X_train, y_train)
     train_scores.append(f1_score(y_train, clf.predict(X_train)))
 
-# --- 3. PLOT PRUNING CURVE (Required Figure) ---
+# --- 3. PLOT PRUNING CURVE
 print(X_train.shape)
 plt.figure(figsize=(10, 6))
 plt.plot(ccp_alphas, train_scores, marker='o', label="Train F1", drawstyle="steps-post")
@@ -308,19 +258,19 @@ best_idx = np.argmax(val_scores)
 best_alpha = ccp_alphas[best_idx]
 print(f"Best ccp_alpha: {best_alpha:.5f} with CV F1: {val_scores[best_idx]:.4f}")
 
-# Train Final Tree
+#--- 5. Train Final (best) Tree
 final_tree = Pipeline(steps=[
     ('preprocessor', preprocessor),
     ('classifier', DecisionTreeClassifier(random_state=42, ccp_alpha=best_alpha))
 ])
 final_tree.fit(X_train, y_train)
 
-# Report Complexity (Required)
+# --- 6. Report Complexity
 tree_model = final_tree.named_steps['classifier']
 print(f"Final Tree Depth: {tree_model.get_depth()}")
 print(f"Final Leaf Count: {tree_model.get_n_leaves()}")
 
-# --- 5. PLOT LEARNING CURVE (Required) ---
+# --- 7. PLOT LEARNING CURVE
 def plot_learning_curve(estimator, title, X, y, ylim=None, cv=5, n_jobs=-1):
     plt.figure(figsize=(10, 6))
     plt.title(title)
@@ -357,10 +307,10 @@ def plot_learning_curve(estimator, title, X, y, ylim=None, cv=5, n_jobs=-1):
 # Run it on your BEST pruned model
 plot_learning_curve(final_tree, "Learning Curve (Pruned Decision Tree)", X_train, y_train)
 
-# --- 6. FINAL EVALUATION ON TEST SET ---
+# --- 8. FINAL EVALUATION ON TEST SET ---
 print("--- Final Evaluation (Held-out Test Set) ---")
 
-# Measure Prediction Time (Required for Runtime Table)
+# Measure Prediction Time
 start_pred = time.time()
 y_pred = final_tree.predict(X_test)
 end_pred = time.time()
@@ -381,12 +331,18 @@ disp.plot(cmap='Blues')
 plt.title("Confusion Matrix: Pruned Decision Tree")
 plt.show()
 
+print("............. Decision Tree is done .........")
+#####################################################################################################################
+print("............. KNN  .........")
 
+"""
+KNN
+"""
 
 # --- 1. DEFINE HYPERPARAMETERS ---
 # We test a range of k values (Odd numbers to avoid ties)
 # Small k (High Variance), Large k (High Bias)
-k_values = range(1, 20) # Corrected: This will generate values [1, 2, 3, 4, 5, 6, 7, 8]
+k_values = range(1, 20)
 
 print(f"Tuning kNN with k={list(k_values)}...")
 print("Note: This may take a few minutes. kNN prediction is expensive.")
@@ -395,7 +351,7 @@ cv_scores_mean = []
 cv_scores_std = []
 runtimes = []
 
-# --- 2. MANUAL GRID SEARCH WITH CROSS-VALIDATION ---
+# --- 2. GRID SEARCH WITH CROSS-VALIDATION ---
 for k in k_values:
     start_time = time.time()
 
@@ -430,7 +386,7 @@ best_k_idx = np.argmax(cv_scores_mean)
 best_k = k_values[best_k_idx]
 print(f"\nBest k: {best_k} with CV F1: {cv_scores_mean[best_k_idx]:.4f}")
 
-# Train Final kNN Model (for runtime/comparison tables)
+# --- 5.Train Final kNN Model (for runtime/comparison tables)
 final_knn_pipe = Pipeline(steps=[
     ('preprocessor', preprocessor),
     ('classifier', KNeighborsClassifier(n_neighbors=best_k, n_jobs=-1))
@@ -440,7 +396,7 @@ final_knn_pipe.fit(X_train, y_train)
 X_out = preprocessor.fit_transform(X_train, y_train)
 X_out.shape
 
-# Generate Learning Curve (Use subset of sizes to save time if slow)
+# --- 6. Generate Learning Curve
 train_sizes, train_scores, test_scores = learning_curve(
     final_knn_pipe, X_train, y_train, cv=3, scoring='f1',
     n_jobs=-1, train_sizes=np.linspace(0.1, 1.0, 5)
@@ -456,7 +412,7 @@ plt.legend()
 plt.grid()
 plt.show()
 
-# Train on full X_train and predict on X_test
+#--- 7. Train on full X_train and predict on X_test
 start_time = time.time()
 final_knn_pipe.fit(X_train, y_train)
 fit_time = time.time() - start_time
@@ -476,18 +432,17 @@ disp.plot(cmap='Blues')
 plt.title(f"Confusion Matrix: kNN (k={best_k})")
 plt.show()
 
+print("............. KNN is done  .........")
 
-
-
-
-
-
-
+#####################################################################################################################
+print("............. SVM  .........")
+"""
+SVM
+"""
 
 # --- 1. SETUP SUBSAMPLE FOR TUNING ---
 # SVM is too slow to tune on 32k rows in Colab without waiting hours.
 # We use a stratified subset of 5000 samples for the Grid Search.
-# (The syllabus allows efficient tuning as long as final eval is rigorous)
 print("Subsampling training data for SVM Grid Search (Speed Optimization)...")
 X_tune, _, y_tune, _ = train_test_split(
     X_train, y_train, train_size=5000, stratify=y_train, random_state=42
@@ -536,9 +491,8 @@ print(f"Final Training Done. Time: {time.time() - start_time:.1f}s")
 final_model = best_svm.named_steps['classifier']
 print(f"Total Support Vectors: {final_model.support_vectors_.shape}")
 
-# --- GAP 1: PLOT COMPLEXITY CURVE (Gamma) ---
+# --- 5. PLOT COMPLEXITY CURVE (Gamma) ---
 # We use the tuning subset (X_tune) to keep this fast.
-# This satisfies "Model-complexity curves" [3].
 
 param_range = np.logspace(-3, 0, 6) # Test gamma from 0.001 to 1.0
 train_scores, test_scores = validation_curve(
@@ -563,9 +517,8 @@ plt.show()
 
 
 
-# --- GAP 2: PLOT LEARNING CURVE ---
+# --- 6. PLOT LEARNING CURVE ---
 # We use the best found model.
-# We explicitly test if more data improves the model.
 
 train_sizes, train_scores, test_scores = learning_curve(
     best_svm, X_train, y_train,
@@ -587,9 +540,8 @@ plt.legend(loc="best")
 plt.grid()
 plt.show()
 
-# 1. Predict on the Test Set
-# best_svm is the Pipeline from your GridSearch (includes preprocessing)
-print("Predicting with SVM (this may take a few seconds)...")
+#--- 7. Predict on the Test Set
+# best_svm is the Pipeline from your GridSearch
 y_pred_svm = best_svm.predict(X_test)
 
 # 2. Print Classification Report (Precision/Recall/F1)
@@ -606,10 +558,18 @@ disp.plot(cmap='Blues', ax=ax)
 plt.title("Confusion Matrix: SVM (RBF Kernel)")
 plt.show()
 
+print("............. SVM is done  .........")
+#####################################################################################################################
+
+print("............. MLP  .........")
+
+"""
+MLP Sklearn
+"""
 
 
 # --- 1. Define the SGD-Only MLP ---
-# solver='sgd', momentum=0, learning_rate_init=0.01 are CRITICAL
+# solver='sgd', momentum=0, learning_rate_init=0.01
 mlp_sklearn = MLPClassifier(
     hidden_layer_sizes=(64, 32), # 2 hidden layers
     activation='relu',
@@ -646,7 +606,11 @@ plt.show()
 print(f"Final Training Accuracy: {mlp_sklearn.score(X_train_trans, y_train):.4f}")
 print(f"Iterations ran: {mlp_sklearn.n_iter_}")
 
+#####################################################################################################################
 
+"""
+MLP Pytorch
+"""
 
 # --- 1. Setup Data for PyTorch ---
 # Convert sparse/numpy matrices to Tensors
@@ -676,12 +640,11 @@ class BinaryMLP(nn.Module):
 
 # --- 3. Training Loop (SGD Only) ---
 model = BinaryMLP(input_dim=X_train_trans.shape[1]) # Correct input dimension
-# "No momentum, no Nesterov, no adaptive variants" [5]
 optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.0)
 criterion = nn.CrossEntropyLoss()
 
 loss_history = []
-epochs = 50 # Increase if not converging
+epochs = 50
 
 print(f"\nTraining PyTorch MLP (SGD) for {epochs} epochs...")
 
@@ -711,7 +674,11 @@ plt.grid()
 plt.legend()
 plt.show()
 
+#####################################################################################################################
 
+"""
+MLP Pytorch Deep vs Wide
+"""
 
 # --- 1. SETUP DATA AS TENSORS ---
 # Ensure input dimension matches your One-Hot Encoded data (~100 features)
@@ -750,7 +717,7 @@ class DeepNet(nn.Module):
             nn.Linear(45, 2)
         )
     def forward(self, x): return self.net(x)
-##The syllabus asks for learning curves. This function records both Training Loss and Validation Accuracy per epoch.
+#This function records both Training Loss and Validation Accuracy per epoch.
 # --- 3. TRAINING FUNCTION (Strict SGD) ---
 def train_model(model, name, epochs=50, learning_rate=0.01):
     # Requirement: SGD, No Momentum [4]
@@ -835,13 +802,18 @@ plt.show()
 
 X_train_trans.shape
 
+print("............. MLP is done  .........")
+#####################################################################################################################
+"""
+final models comparison
+"""
+print("............. final models comparison  .........")
 # --- 1. SETUP MODEL LIST ---
-# We list the models. Note: DT, SVM, kNN are Pipelines. MLP is just a Model.
 models = {
     "Decision Tree (Pruned)": final_tree,
     "k-NN (Tuned k)": final_knn_pipe,
     "SVM (RBF)": best_svm,
-    "MLP (Sklearn Wide)": mlp_sklearn, # This needs transformed data!
+    "MLP (Sklearn)": mlp_sklearn, # This needs transformed data!
 }
 
 results = []
@@ -902,11 +874,17 @@ print(f"Dummy Accuracy: {accuracy_score(y_test, y_pred_dummy):.4f}")
 print(f"Dummy F1 Score: {f1_score(y_test, y_pred_dummy):.4f}")
 print(f"Dummy PR-AUC:   {average_precision_score(y_test, y_prob_dummy):.4f}")
 
+
+#####################################################################################################################
+"""
+Bouns part -- Activations
+"""
+print("............. Bouns part -- Activations ...............")
+
 # --- 1. SETUP DATA (Re-using previous tensors) ---
 # Ensure X_train_tensor, y_train_tensor, X_test_trans, y_test are ready
-# (If variables were lost, re-run the Phase 3 Neural Network setup block)
 
-# Create Validation Tensor for the curve (using Test set as proxy for "Hold-out" in this specific study)
+# Create Validation Tensor for the curve
 X_val_tensor = torch.FloatTensor(X_test_trans)
 y_val_tensor = torch.LongTensor(y_test.values)
 
@@ -977,4 +955,4 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-
+print("............. eveything for Dataset A is done now ...........")
